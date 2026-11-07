@@ -38,10 +38,9 @@ environment.example.yaml  documented example of the YAML schema
 - **Prompt override:** `prompt` replaces only `defaultPrompt` (the analyst instructions in `internal/analyzer/prompt.go`). The environment block, the items, the duplicate rule and the JSON output contract are always added by Go, so a user prompt can't break parsing. `research_prompt` works the same way: it replaces only `defaultResearchPrompt`, and the environment, the finding and the JSON output contract are added by Go.
 
 ## Status
-- **Done:** config, YAML schema, feed fetching, the Claude CLI analyzer, the pipeline, and the stdout notifier (`-dry-run`).
+- **Done:** config, YAML schema, feed fetching, the Claude CLI analyzer, the pipeline, the stdout notifier (`-dry-run`), and the Discord notifier (splits on lines into ≤2000-character messages, retries once on 429, disables mentions, strips the webhook URL from errors).
 - **Stubbed** (return `not implemented`):
   - `notify/email.go`: should use net/smtp with STARTTLS.
-  - `notify/discord.go`: split the message into chunks of at most 2000 characters.
   - `notify/gotify.go`: POST `/message` with the `X-Gotify-Key` header and markdown extras.
 - `digest.Text()` just returns the Markdown.
 - **Known issues:**

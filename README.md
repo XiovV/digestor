@@ -48,7 +48,7 @@ stack:               # required
 | `DISCORD_WEBHOOK_URL` | | Discord: enabled when set |
 | `GOTIFY_URL`, `GOTIFY_TOKEN` | | Gotify: enabled when `GOTIFY_URL` is set |
 
-> Email, Discord and Gotify delivery are not implemented yet. Use `-dry-run` for now.
+> Email and Gotify delivery are not implemented yet.
 
 ## Run
 

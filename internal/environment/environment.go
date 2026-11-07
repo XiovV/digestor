@@ -16,11 +16,23 @@ import (
 
 var exposures = []string{"internet", "internal", "local"}
 
+// relevances lists the relevance levels Claude assigns to findings.
+var relevances = []string{"critical", "high", "medium", "low"}
+
+// defaultResearchRelevance is used when research_relevance is not set.
+var defaultResearchRelevance = []string{"critical", "high"}
+
 type Environment struct {
 	// Prompt overrides the built-in analyst instructions when set.
-	Prompt  string      `yaml:"prompt,omitempty"`
-	Context string      `yaml:"context,omitempty"`
-	Stack   []Component `yaml:"stack"`
+	Prompt string `yaml:"prompt,omitempty"`
+	// ResearchPrompt overrides the built-in research instructions when set.
+	ResearchPrompt string `yaml:"research_prompt,omitempty"`
+	// ResearchRelevance lists the relevance levels that get researched
+	// online. Load sets it to critical and high when the file leaves it out;
+	// an empty list turns research off.
+	ResearchRelevance []string    `yaml:"research_relevance,omitempty"`
+	Context           string      `yaml:"context,omitempty"`
+	Stack             []Component `yaml:"stack"`
 }
 
 type Component struct {
@@ -45,6 +57,9 @@ func Load(path string) (*Environment, error) {
 	if err := dec.Decode(&env); err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("parsing environment file %s: %w", path, err)
 	}
+	if env.ResearchRelevance == nil {
+		env.ResearchRelevance = defaultResearchRelevance
+	}
 	if err := env.validate(); err != nil {
 		return nil, fmt.Errorf("invalid environment file %s: %w", path, err)
 	}
@@ -57,6 +72,11 @@ func (e *Environment) validate() error {
 	}
 
 	var errs []error
+	for _, r := range e.ResearchRelevance {
+		if !slices.Contains(relevances, r) {
+			errs = append(errs, fmt.Errorf("research_relevance: %q must be one of %v", r, relevances))
+		}
+	}
 	for i, c := range e.Stack {
 		if c.Name == "" {
 			errs = append(errs, fmt.Errorf("stack[%d]: name is required", i))
@@ -69,7 +89,7 @@ func (e *Environment) validate() error {
 }
 
 // Describe returns the context and stack as YAML for embedding in prompts.
-// The prompt itself is left out.
+// The prompts themselves are left out.
 func (e *Environment) Describe() (string, error) {
 	out, err := yaml.Marshal(struct {
 		Context string      `yaml:"context,omitempty"`

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/XiovV/digestor/internal/analyzer"
@@ -38,9 +39,14 @@ func (a *App) Run(ctx context.Context) error {
 	}
 	slog.Info("filtered items", "relevant", len(findings))
 
-	// A failed research call keeps the unresearched finding in the digest.
+	// Only findings with a relevance listed in research_relevance are
+	// researched. A failed research call keeps the unresearched finding in
+	// the digest.
 	var errs []error
 	for i, f := range findings {
+		if !slices.Contains(a.Env.ResearchRelevance, f.Relevance) {
+			continue
+		}
 		researched, err := a.Analyzer.Research(ctx, f, a.Env)
 		if err != nil {
 			slog.Warn("researching finding failed", "title", f.Item.Title, "err", err)

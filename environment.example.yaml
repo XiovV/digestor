@@ -7,6 +7,19 @@
 #   critical, high, medium or low. Only nginx is reachable from the internet,
 #   so be strict about anything else. Skip Windows-only issues.
 
+# Optional: research instructions for Claude, used for each finding whose
+# relevance is listed in research_relevance. If left out, a built-in default is used. digestor adds the stack,
+# the finding and the JSON output format.
+# research_prompt: |
+#   Research this item online: affected versions, CVE identifiers, whether it
+#   is actively exploited, and how to fix it. Keep the answer under 800
+#   characters and lead with what I should do.
+
+# Optional: which relevance levels get researched online. Each researched
+# finding is one extra Claude call with web search, so this drives cost and
+# run time. Defaults to [critical, high]; [] turns research off.
+# research_relevance: [critical, high]
+
 # Optional: free text about the environment as a whole.
 context: |
   Small homelab: 3 Debian hosts running Docker and a k3s cluster.

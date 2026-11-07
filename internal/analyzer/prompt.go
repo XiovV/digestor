@@ -42,12 +42,14 @@ Respond with ONLY a JSON array, no prose, where each element is:
 Respond with [] if nothing is relevant.
 `))
 
-var researchTmpl = template.Must(template.New("research").Parse(`You are a security analyst. The news item below was flagged as relevant to my environment.
+// defaultResearchPrompt holds the research instructions used when the
+// environment file does not set its own research_prompt.
+const defaultResearchPrompt = `You are a security analyst. The news item below was flagged as relevant to my environment.
 
-Research it online: affected versions, CVE identifiers, whether it is actively exploited, and remediation steps. Focus on what applies to my environment.
+Research it online: affected versions, CVE identifiers, whether it is actively exploited, and remediation steps. Focus on what applies to my environment.`
 
-Respond with ONLY a JSON object, no prose:
-{"research": "<concise findings and recommended actions>", "references": ["<url>"]}
+// The parts after {{.Instructions}} are fixed: the Go code depends on them.
+var researchTmpl = template.Must(template.New("research").Parse(`{{.Instructions}}
 
 <environment>
 {{.Environment}}</environment>
@@ -58,6 +60,9 @@ Link: {{.Finding.Item.Link}}
 Affected components: {{range .Finding.Affected}}{{.}} {{end}}
 Initial assessment: {{.Finding.Summary}}
 </item>
+
+Respond with ONLY a JSON object, no prose:
+{"research": "<concise findings and recommended actions>", "references": ["<url>"]}
 `))
 
 func filterPrompt(items []feed.Item, env *environment.Environment) (string, error) {
@@ -83,7 +88,15 @@ func researchPrompt(f Finding, env *environment.Environment) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return render(researchTmpl, map[string]any{"Environment": desc, "Finding": f})
+	instructions := strings.TrimSpace(env.ResearchPrompt)
+	if instructions == "" {
+		instructions = defaultResearchPrompt
+	}
+	return render(researchTmpl, map[string]any{
+		"Instructions": instructions,
+		"Environment":  desc,
+		"Finding":      f,
+	})
 }
 
 func render(t *template.Template, data any) (string, error) {

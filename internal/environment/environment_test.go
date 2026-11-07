@@ -3,6 +3,7 @@ package environment
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -17,6 +18,7 @@ func TestLoad(t *testing.T) {
 			name: "valid",
 			yaml: `
 prompt: Be brief.
+research_prompt: Cite CVEs.
 context: Homelab.
 stack:
   - name: nginx
@@ -33,6 +35,7 @@ stack:
 		{name: "missing name", yaml: "stack:\n  - version: \"1\"", wantErr: "stack[0]: name is required"},
 		{name: "bad exposure", yaml: "stack:\n  - name: nginx\n    exposure: public", wantErr: `exposure "public"`},
 		{name: "unknown key", yaml: "stack:\n  - name: nginx\n    exposre: internet", wantErr: "exposre"},
+		{name: "bad research relevance", yaml: "research_relevance: [urgent]\nstack:\n  - name: nginx", wantErr: `research_relevance: "urgent"`},
 	}
 
 	for _, tt := range tests {
@@ -59,14 +62,43 @@ stack:
 	}
 }
 
-func TestDescribeOmitsPrompt(t *testing.T) {
-	env := &Environment{Prompt: "SECRET INSTRUCTIONS", Context: "Homelab.", Stack: []Component{{Name: "nginx"}}}
+func TestLoadResearchRelevance(t *testing.T) {
+	tests := []struct {
+		name string
+		yaml string
+		want []string
+	}{
+		{name: "default", yaml: "", want: []string{"critical", "high"}},
+		{name: "custom", yaml: "research_relevance: [critical, high, medium]\n", want: []string{"critical", "high", "medium"}},
+		{name: "disabled", yaml: "research_relevance: []\n", want: []string{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "environment.yaml")
+			if err := os.WriteFile(path, []byte(tt.yaml+"stack:\n  - name: nginx\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			env, err := Load(path)
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if !slices.Equal(env.ResearchRelevance, tt.want) {
+				t.Errorf("ResearchRelevance = %v, want %v", env.ResearchRelevance, tt.want)
+			}
+		})
+	}
+}
+
+func TestDescribeOmitsPrompts(t *testing.T) {
+	env := &Environment{Prompt: "SECRET INSTRUCTIONS", ResearchPrompt: "RESEARCH INSTRUCTIONS", Context: "Homelab.", Stack: []Component{{Name: "nginx"}}}
 
 	desc, err := env.Describe()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(desc, "SECRET INSTRUCTIONS") || !strings.Contains(desc, "nginx") || !strings.Contains(desc, "Homelab.") {
+	if strings.Contains(desc, "SECRET INSTRUCTIONS") || strings.Contains(desc, "RESEARCH INSTRUCTIONS") || !strings.Contains(desc, "nginx") || !strings.Contains(desc, "Homelab.") {
 		t.Errorf("Describe() = %q", desc)
 	}
 }

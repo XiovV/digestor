@@ -9,9 +9,13 @@ import (
 	"github.com/XiovV/digestor/internal/feed"
 )
 
+// NotRelevant is the relevance of an item Claude skipped. Its Summary holds
+// the reason, or is empty when Claude did not mention the item.
+const NotRelevant = "none"
+
 type Finding struct {
 	Item       feed.Item
-	Relevance  string   // critical, high, medium, low
+	Relevance  string   // critical, high, medium, low or NotRelevant
 	Affected   []string // components from the environment that match
 	Summary    string
 	Research   string // filled by Research
@@ -19,8 +23,9 @@ type Finding struct {
 }
 
 type Analyzer interface {
-	// Filter returns the items relevant to env. It runs once over the whole
-	// batch without tool access.
+	// Filter rates every item against env and returns one finding per item;
+	// items that don't matter have relevance NotRelevant. It runs once over
+	// the whole batch without tool access.
 	Filter(ctx context.Context, items []feed.Item, env *environment.Environment) ([]Finding, error)
 
 	// Research enriches a single finding using online sources.

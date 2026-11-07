@@ -30,7 +30,7 @@ func TestFilterPrompt(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			for _, s := range []string{tt.want, "Respond with ONLY a JSON array", "name: nginx", "[0] nginx CVE"} {
+			for _, s := range []string{tt.want, "Respond with ONLY a JSON array", `"relevance": "none"`, "name: nginx", "[0] nginx CVE"} {
 				if !strings.Contains(got, s) {
 					t.Errorf("prompt missing %q", s)
 				}

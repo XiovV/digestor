@@ -35,11 +35,12 @@ Published: {{$it.Published.Format "2006-01-02"}}
 
 {{end}}</items>
 
-If several items cover the same story, return only one of them.
+If several items cover the same story, rate only one of them and mark the others as not relevant with the reason "duplicate of [<item number>]".
 
-Respond with ONLY a JSON array, no prose, where each element is:
+Respond with ONLY a JSON array, no prose, with one element for every item. For an item that matters to me:
 {"index": <item number>, "relevance": "critical|high|medium|low", "affected": ["<component name from the stack>"], "summary": "<one or two sentences on why it matters to me>"}
-Respond with [] if nothing is relevant.
+For an item that does not:
+{"index": <item number>, "relevance": "none", "summary": "<a few words on why it was skipped>"}
 `))
 
 // defaultResearchPrompt holds the research instructions used when the

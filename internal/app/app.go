@@ -43,17 +43,27 @@ func (a *App) Run(ctx context.Context) error {
 		return err
 	}
 
-	var findings []analyzer.Finding
+	var findings, skipped []analyzer.Finding
 	if len(items) == 0 {
 		slog.Info("no items in the lookback window, skipping analysis")
 	} else {
 		slog.Info("filtering items with claude", "items", len(items))
 		t := time.Now()
-		findings, err = a.Analyzer.Filter(ctx, items, a.Env)
+		rated, err := a.Analyzer.Filter(ctx, items, a.Env)
 		if err != nil {
 			return errors.Join(append(errs, fmt.Errorf("filtering items: %w", err))...)
 		}
-		slog.Info("filtered items", "relevant", len(findings), "duration", time.Since(t).Round(time.Second))
+		for _, f := range rated {
+			if f.Relevance == analyzer.NotRelevant {
+				skipped = append(skipped, f)
+			} else {
+				findings = append(findings, f)
+			}
+		}
+		slog.Info("filtered items", "relevant", len(findings), "skipped", len(skipped), "duration", time.Since(t).Round(time.Second))
+	}
+	for _, f := range skipped {
+		slog.Debug("skipped item", "title", f.Item.Title, "reason", f.Summary)
 	}
 	for _, f := range findings {
 		slog.Info("relevant item", "relevance", f.Relevance, "title", f.Item.Title, "affected", f.Affected)
@@ -98,6 +108,7 @@ func (a *App) Run(ctx context.Context) error {
 		GeneratedAt: time.Now(),
 		ItemsSeen:   len(items),
 		Findings:    findings,
+		Skipped:     skipped,
 	}
 
 	if err := notify.SendAll(ctx, a.Notifiers, d); err != nil {

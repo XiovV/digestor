@@ -13,6 +13,7 @@ type Digest struct {
 	GeneratedAt time.Time
 	ItemsSeen   int
 	Findings    []analyzer.Finding
+	Skipped     []analyzer.Finding // items Claude rated not relevant, with the reason in Summary
 }
 
 func (d Digest) Title() string {
@@ -26,8 +27,7 @@ func (d Digest) Markdown() string {
 	fmt.Fprintf(&b, "# %s\n\n", d.Title())
 
 	if len(d.Findings) == 0 {
-		b.WriteString("Nothing relevant to your environment.\n")
-		return b.String()
+		b.WriteString("Nothing relevant to your environment.\n\n")
 	}
 
 	for _, f := range d.Findings {
@@ -44,6 +44,21 @@ func (d Digest) Markdown() string {
 			fmt.Fprintf(&b, "- %s\n", ref)
 		}
 		b.WriteString("\n")
+	}
+
+	if len(d.Skipped) > 0 {
+		fmt.Fprintf(&b, "## Not relevant (%d)\n", len(d.Skipped))
+		for _, f := range d.Skipped {
+			reason := f.Summary
+			if reason == "" {
+				reason = "no reason given"
+			}
+			fmt.Fprintf(&b, "- %s: %s\n", f.Item.Title, reason)
+			// Angle brackets keep Discord from adding a preview for every link.
+			if f.Item.Link != "" {
+				fmt.Fprintf(&b, "  <%s>\n", f.Item.Link)
+			}
+		}
 	}
 	return b.String()
 }

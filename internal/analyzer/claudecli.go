@@ -50,18 +50,30 @@ func (c *ClaudeCLI) Filter(ctx context.Context, items []feed.Item, env *environm
 		return nil, fmt.Errorf("decoding filter response: %w", err)
 	}
 
-	findings := make([]Finding, 0, len(resp))
+	findings := make([]Finding, 0, len(items))
+	rated := make([]bool, len(items))
 	for _, r := range resp {
 		if r.Index < 0 || r.Index >= len(items) {
 			slog.Warn("claude returned unknown item index", "index", r.Index)
 			continue
 		}
+		if rated[r.Index] {
+			continue
+		}
+		rated[r.Index] = true
 		findings = append(findings, Finding{
 			Item:      items[r.Index],
 			Relevance: r.Relevance,
 			Affected:  r.Affected,
 			Summary:   r.Summary,
 		})
+	}
+	// Items Claude left out are kept as not relevant, so the digest
+	// accounts for every item.
+	for i, it := range items {
+		if !rated[i] {
+			findings = append(findings, Finding{Item: it, Relevance: NotRelevant})
+		}
 	}
 	return findings, nil
 }

@@ -74,6 +74,7 @@ func run(envFile string, dryRun bool) error {
 		},
 		Advisories: &advisory.Client{Token: cfg.GitHubToken},
 		Notifiers:  notifiers,
+		DryRun:     dryRun,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

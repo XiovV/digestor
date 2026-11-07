@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -18,6 +20,7 @@ import (
 	"github.com/XiovV/digestor/internal/environment"
 	"github.com/XiovV/digestor/internal/feed"
 	"github.com/XiovV/digestor/internal/notify"
+	"github.com/XiovV/digestor/internal/state"
 )
 
 // passAnalyzer stands in for Claude: every item becomes a low finding, so
@@ -36,13 +39,29 @@ func (passAnalyzer) Research(_ context.Context, f analyzer.Finding, _ *environme
 	return f, errors.New("research not expected")
 }
 
-type recorder struct{ sent []digest.Digest }
+type recorder struct {
+	sent []digest.Digest
+	fail bool
+}
 
 func (r *recorder) Name() string { return "recorder" }
 
 func (r *recorder) Send(_ context.Context, d digest.Digest) error {
+	if r.fail {
+		return errors.New("boom")
+	}
 	r.sent = append(r.sent, d)
 	return nil
+}
+
+// testConfig returns the default window settings and a state file in a
+// fresh temporary directory.
+func testConfig(t *testing.T) *config.Config {
+	return &config.Config{
+		StateFile: filepath.Join(t.TempDir(), "state.json"),
+		Overlap:   48 * time.Hour,
+		MaxWindow: 168 * time.Hour,
+	}
 }
 
 func TestRunSources(t *testing.T) {
@@ -89,7 +108,7 @@ func TestRunSources(t *testing.T) {
 			srv := httptest.NewServer(mux)
 			defer srv.Close()
 
-			cfg := &config.Config{Lookback: 24 * time.Hour}
+			cfg := testConfig(t)
 			if tt.feeds != "none" {
 				cfg.Feeds = []string{srv.URL + "/feed"}
 			}
@@ -133,6 +152,82 @@ func TestRunSources(t *testing.T) {
 			}
 			if !slices.Equal(got, tt.wantGUIDs) || d.ItemsSeen != len(tt.wantGUIDs) {
 				t.Errorf("digest has %q of %d items, want %q", got, d.ItemsSeen, tt.wantGUIDs)
+			}
+		})
+	}
+}
+
+func TestRunState(t *testing.T) {
+	published := time.Now().Add(-time.Hour)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /feed", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, `<?xml version="1.0"?><rss version="2.0"><channel><title>News</title>
+<item><title>Caddy news</title><link>https://news.example/1</link><guid>news-1</guid><pubDate>%s</pubDate></item>
+</channel></rss>`, published.Format(time.RFC1123Z))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	tests := []struct {
+		name      string
+		dryRun    bool
+		fail      bool // the only notifier fails
+		wantSaved bool
+	}{
+		{name: "delivered", wantSaved: true},
+		{name: "dry run", dryRun: true},
+		{name: "not delivered", fail: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := testConfig(t)
+			cfg.Feeds = []string{srv.URL + "/feed"}
+			rec := &recorder{fail: tt.fail}
+			a := &App{
+				Config:     cfg,
+				Env:        &environment.Environment{Stack: []environment.Component{{Name: "Caddy"}}},
+				Analyzer:   passAnalyzer{},
+				Advisories: &advisory.Client{},
+				Notifiers:  []notify.Notifier{rec},
+				DryRun:     tt.dryRun,
+			}
+
+			before := time.Now()
+			err := a.Run(context.Background())
+			if tt.fail != (err != nil) {
+				t.Fatalf("Run() error = %v", err)
+			}
+
+			_, statErr := os.Stat(cfg.StateFile)
+			if saved := statErr == nil; saved != tt.wantSaved {
+				t.Fatalf("state saved = %t, want %t", saved, tt.wantSaved)
+			}
+			if !tt.wantSaved {
+				return
+			}
+
+			st, err := state.Load(cfg.StateFile)
+			if err != nil {
+				t.Fatalf("state.Load() error = %v", err)
+			}
+			if st.LastRun.Before(before) {
+				t.Errorf("LastRun = %v, want the start of the run", st.LastRun)
+			}
+			key := srv.URL + "/feed news-1"
+			if _, ok := st.Items[key]; !ok {
+				t.Errorf("Items = %v, want %q", st.Items, key)
+			}
+
+			// The item is still in the fetch window, but it was digested.
+			if err := a.Run(context.Background()); err != nil {
+				t.Fatalf("second Run() error = %v", err)
+			}
+			if len(rec.sent) != 2 {
+				t.Fatalf("sent %d digests, want 2", len(rec.sent))
+			}
+			if d := rec.sent[1]; d.ItemsSeen != 0 || len(d.Findings) != 0 {
+				t.Errorf("second digest has %d items and %d findings, want none", d.ItemsSeen, len(d.Findings))
 			}
 		})
 	}

@@ -11,9 +11,15 @@ import (
 )
 
 type Config struct {
-	Feeds    []string
-	EnvFile  string
-	Lookback time.Duration
+	Feeds   []string
+	EnvFile string
+
+	// StateFile remembers the last successful run and the digested items.
+	StateFile string
+	// Overlap is how far the fetch window reaches back before the last
+	// successful run; MaxWindow caps how far back it reaches at all.
+	Overlap   time.Duration
+	MaxWindow time.Duration
 
 	// GitHubToken raises the GitHub API rate limit; optional.
 	GitHubToken string
@@ -62,6 +68,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Feeds:       ParseList(os.Getenv("RSS_FEEDS")),
 		EnvFile:     getenv("DIGESTOR_ENV_FILE", "environment.yaml"),
+		StateFile:   getenv("DIGESTOR_STATE", "digestor-state.json"),
 		GitHubToken: os.Getenv("GITHUB_TOKEN"),
 		Claude: Claude{
 			Bin:   getenv("CLAUDE_BIN", "claude"),
@@ -84,7 +91,10 @@ func Load() (*Config, error) {
 	}
 
 	var err error
-	if cfg.Lookback, err = durationEnv("DIGESTOR_LOOKBACK", 24*time.Hour); err != nil {
+	if cfg.Overlap, err = durationEnv("DIGESTOR_OVERLAP", 48*time.Hour); err != nil {
+		errs = append(errs, err)
+	}
+	if cfg.MaxWindow, err = durationEnv("DIGESTOR_MAX_WINDOW", 7*24*time.Hour); err != nil {
 		errs = append(errs, err)
 	}
 	if cfg.Claude.Timeout, err = durationEnv("CLAUDE_TIMEOUT", 10*time.Minute); err != nil {
@@ -97,6 +107,12 @@ func Load() (*Config, error) {
 		errs = append(errs, err)
 	}
 
+	switch {
+	case cfg.Overlap <= 0 || cfg.MaxWindow <= 0:
+		errs = append(errs, errors.New("DIGESTOR_OVERLAP and DIGESTOR_MAX_WINDOW must be positive"))
+	case cfg.Overlap > cfg.MaxWindow:
+		errs = append(errs, fmt.Errorf("DIGESTOR_OVERLAP (%s) must not be longer than DIGESTOR_MAX_WINDOW (%s)", cfg.Overlap, cfg.MaxWindow))
+	}
 	if cfg.SMTP.Enabled() && (cfg.SMTP.From == "" || len(cfg.SMTP.To) == 0) {
 		errs = append(errs, errors.New("SMTP_FROM and SMTP_TO are required when SMTP_HOST is set"))
 	}

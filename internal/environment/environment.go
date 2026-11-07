@@ -54,7 +54,7 @@ type Component struct {
 }
 
 // Advisories lists the advisory database queries to run. Each list maps to
-// one endpoint; the lookback window, paging and auth are added by the
+// one endpoint; the fetch window, paging and auth are added by the
 // advisory package.
 type Advisories struct {
 	// GitHub queries GET /advisories, the global GitHub Advisory Database.

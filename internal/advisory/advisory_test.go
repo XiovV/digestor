@@ -229,7 +229,7 @@ func TestFetchGitHubRepo(t *testing.T) {
 				"per_page":  {"100"},
 			}
 			if got := r.URL.Query(); !reflect.DeepEqual(got, want) {
-				t.Errorf("query = %v, want %v (a page past the lookback window was requested?)", got, want)
+				t.Errorf("query = %v, want %v (a page past the fetch window was requested?)", got, want)
 			}
 			checkGitHubHeaders(t, r, "")
 			w.Header().Set("Link", fmt.Sprintf(`<%s/repos/caddyserver/caddy/security-advisories?after=c2>; rel="next"`, srv.URL))
@@ -346,7 +346,7 @@ func TestFetchOSVPagination(t *testing.T) {
 	}
 }
 
-// TestFetchMerges covers the lookback window, withdrawn advisories,
+// TestFetchMerges covers the fetch window, withdrawn advisories,
 // duplicates across sources (the first source wins) and newest-first order.
 func TestFetchMerges(t *testing.T) {
 	withCVE := ghsa("GHSA-aaaa-aaaa-aaaa", "2026-11-06T12:00:00Z")
@@ -429,6 +429,7 @@ func TestFetchItems(t *testing.T) {
 				Title:     "Hop-by-hop headers leak through",
 				Link:      "https://github.com/advisories/GHSA-8qx7-j2v2-x6q5",
 				GUID:      "GHSA-8qx7-j2v2-x6q5",
+				Keys:      []string{"GHSA-8qx7-j2v2-x6q5", "CVE-2026-55458"},
 				Published: time.Date(2026, 11, 6, 19, 49, 33, 0, time.UTC),
 				Summary: "IDs: GHSA-8qx7-j2v2-x6q5, CVE-2026-55458\n" +
 					"Severity: low (CVSS 2.9)\n" +
@@ -464,6 +465,7 @@ func TestFetchItems(t *testing.T) {
 				Title:     "Path traversal in file_server",
 				Link:      "https://github.com/caddyserver/caddy/security/advisories/GHSA-jf74-f69g-hcj9",
 				GUID:      "GHSA-jf74-f69g-hcj9",
+				Keys:      []string{"GHSA-jf74-f69g-hcj9"},
 				Published: time.Date(2026, 11, 6, 1, 11, 26, 0, time.UTC),
 				Summary: "IDs: GHSA-jf74-f69g-hcj9\n" +
 					"Severity: high (CVSS 7.5)\n" +
@@ -494,6 +496,7 @@ func TestFetchItems(t *testing.T) {
 				Title:     "Stack exhaustion in all Parse functions in go/parser",
 				Link:      "https://osv.dev/vulnerability/GO-2024-3105",
 				GUID:      "GO-2024-3105",
+				Keys:      []string{"GO-2024-3105", "CVE-2024-34155"},
 				Published: time.Date(2026, 11, 6, 15, 0, 0, 0, time.UTC),
 				Summary: "IDs: GO-2024-3105, CVE-2024-34155\n" +
 					"Affected: stdlib < 1.22.7; >= 1.23.0-0, < 1.23.1\n" +
@@ -525,6 +528,7 @@ func TestFetchItems(t *testing.T) {
 				Title:     "Unbounded body buffer",
 				Link:      "https://osv.dev/vulnerability/GHSA-j8px-rmrx-76h9",
 				GUID:      "GHSA-j8px-rmrx-76h9",
+				Keys:      []string{"GHSA-j8px-rmrx-76h9", "CVE-2026-77281", "GO-2026-6001"},
 				Published: time.Date(2026, 11, 6, 13, 0, 0, 0, time.UTC),
 				Summary: "IDs: GHSA-j8px-rmrx-76h9, CVE-2026-77281, GO-2026-6001\n" +
 					"Severity: medium\n" +
@@ -542,6 +546,7 @@ func TestFetchItems(t *testing.T) {
 				Title:     "GO-2026-0009",
 				Link:      "https://osv.dev/vulnerability/GO-2026-0009",
 				GUID:      "GO-2026-0009",
+				Keys:      []string{"GO-2026-0009"},
 				Published: time.Date(2026, 11, 6, 13, 0, 0, 0, time.UTC),
 				Summary:   "IDs: GO-2026-0009\nNo summary.",
 			},
@@ -569,7 +574,7 @@ func TestFetchItems(t *testing.T) {
 				t.Errorf("Published = %v, want %v", got.Published, tt.want.Published)
 			}
 			got.Published, tt.want.Published = time.Time{}, time.Time{}
-			if got != tt.want {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("item =\n%+v\nwant\n%+v", got, tt.want)
 			}
 		})

@@ -41,7 +41,9 @@ stack:               # required
 |---|---|---|
 | `RSS_FEEDS` | (required) | Feed URLs, separated by commas or newlines |
 | `DIGESTOR_ENV_FILE` | `environment.yaml` | Path to the environment YAML |
-| `DIGESTOR_LOOKBACK` | `24h` | Only items published within this window |
+| `DIGESTOR_STATE` | `digestor-state.json` | State file: the last successful run and the digested items |
+| `DIGESTOR_OVERLAP` | `48h` | How far before the last successful run each fetch starts |
+| `DIGESTOR_MAX_WINDOW` | `168h` | The furthest back a run fetches |
 | `CLAUDE_MODEL` | CLI default | Model passed to `claude --model` |
 | `CLAUDE_TIMEOUT` | `10m` | Timeout per Claude call |
 | `SMTP_*` | | Email: enabled when `SMTP_HOST` is set |
@@ -103,3 +105,14 @@ digestor runs once and exits, with a non-zero exit code if anything failed. To g
 ```cron
 0 7 * * * cd /opt/digestor && ./digestor
 ```
+
+### State
+
+digestor remembers what it already sent in `DIGESTOR_STATE`, so you can schedule it as often as you like without getting the same item twice:
+
+- Each run fetches items published since the last successful run minus `DIGESTOR_OVERLAP`. The overlap catches items that show up in a feed after their publish date. Items that were already digested are dropped before Claude sees them.
+- A run is successful once at least one notifier delivered the digest. Only then is the state written. If delivery keeps failing, the next run fetches the same window again, but never further back than `DIGESTOR_MAX_WINDOW`.
+- The first run, or a run with the state file missing, fetches `DIGESTOR_OVERLAP` alone. Set it higher for one run to get a backfill.
+- `-dry-run` reads the state but never writes it, so it shows what the next real run would send.
+
+Keep the state file on persistent storage. In a Kubernetes CronJob, mount a volume and point `DIGESTOR_STATE` at it, or every run starts over. Don't start a run while another is still going (`concurrencyPolicy: Forbid`, `flock -n` with cron), or both send the same digest.

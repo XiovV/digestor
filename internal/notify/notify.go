@@ -32,9 +32,9 @@ func FromConfig(cfg *config.Config) []Notifier {
 	return ns
 }
 
-// SendAll sends d through every notifier. A failure in one does not stop
-// the others; all errors are returned joined.
-func SendAll(ctx context.Context, ns []Notifier, d digest.Digest) error {
+// SendAll sends d through every notifier and returns how many delivered it.
+// A failure in one does not stop the others; all errors are returned joined.
+func SendAll(ctx context.Context, ns []Notifier, d digest.Digest) (delivered int, err error) {
 	var errs []error
 	for _, n := range ns {
 		slog.Debug("sending digest", "notifier", n.Name(), "findings", len(d.Findings))
@@ -45,6 +45,7 @@ func SendAll(ctx context.Context, ns []Notifier, d digest.Digest) error {
 			continue
 		}
 		slog.Info("digest sent", "notifier", n.Name(), "duration", time.Since(start).Round(time.Millisecond))
+		delivered++
 	}
-	return errors.Join(errs...)
+	return delivered, errors.Join(errs...)
 }

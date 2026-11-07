@@ -35,3 +35,4 @@ go.work.sum
 # digestor
 /digestor
 environment.yaml
+digestor-state.json

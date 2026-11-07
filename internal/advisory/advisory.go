@@ -159,6 +159,7 @@ func (a advisory) item(source string) feed.Item {
 		Summary:   strings.TrimSpace(b.String()),
 		GUID:      a.ids[0],
 		Published: a.published,
+		Keys:      a.ids,
 	}
 }
 

@@ -64,8 +64,8 @@ stack:
     type: platform
     exposure: internal
 
-# Optional: advisory database queries. Advisories published within
-# DIGESTOR_LOOKBACK go through the same Claude filter as the RSS items.
+# Optional: advisory database queries. Advisories published within the
+# fetch window go through the same Claude filter as the RSS items.
 # digestor adds the time window, paging and the GitHub token (GITHUB_TOKEN).
 # An advisory found by more than one query is reported once.
 advisories:

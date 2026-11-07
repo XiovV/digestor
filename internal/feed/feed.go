@@ -20,6 +20,9 @@ type Item struct {
 	Summary   string
 	GUID      string
 	Published time.Time
+	// Keys identify the item across runs: once it is digested, an item
+	// sharing any of these keys is skipped.
+	Keys []string
 }
 
 // Fetch retrieves all feeds concurrently and returns the items published
@@ -90,12 +93,27 @@ func fetchOne(ctx context.Context, url string, since time.Time) ([]Item, error) 
 			Summary:   it.Description,
 			GUID:      it.GUID,
 			Published: published,
+			Keys:      itemKeys(url, it),
 		})
 	}
 
 	slog.Debug("fetched feed", "url", url, "title", f.Title, "total", len(f.Items), "in_window", len(items),
 		"undated", undated, "duration", time.Since(start).Round(time.Millisecond))
 	return items, nil
+}
+
+// itemKeys keys a news item by its feed URL and GUID, or its link when the
+// feed gives no GUID. The URL keeps feeds that number their GUIDs from
+// colliding.
+func itemKeys(url string, it *gofeed.Item) []string {
+	id := it.GUID
+	if id == "" {
+		id = it.Link
+	}
+	if id == "" {
+		return nil
+	}
+	return []string{url + " " + id}
 }
 
 func itemTime(it *gofeed.Item) time.Time {

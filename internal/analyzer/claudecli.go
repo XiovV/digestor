@@ -46,6 +46,7 @@ func (c *ClaudeCLI) Filter(ctx context.Context, items []feed.Item, env *environm
 		Summary   string   `json:"summary"`
 	}
 	if err := decodeJSON(out, &resp); err != nil {
+		slog.Debug("unparseable filter response", "result", out)
 		return nil, fmt.Errorf("decoding filter response: %w", err)
 	}
 
@@ -81,6 +82,7 @@ func (c *ClaudeCLI) Research(ctx context.Context, f Finding, env *environment.En
 		References []string `json:"references"`
 	}
 	if err := decodeJSON(out, &resp); err != nil {
+		slog.Debug("unparseable research response", "title", f.Item.Title, "result", out)
 		return f, fmt.Errorf("decoding research response: %w", err)
 	}
 
@@ -110,28 +112,43 @@ func (c *ClaudeCLI) run(ctx context.Context, prompt string, tools []string) (str
 	}
 
 	cmd := exec.CommandContext(ctx, c.Bin, args...)
+	// On timeout, kill claude together with any processes it started. If one
+	// escaped the group and still holds stdout open, stop waiting on it after
+	// a few seconds.
+	killProcessGroup(cmd)
+	cmd.WaitDelay = 5 * time.Second
 	cmd.Stdin = strings.NewReader(prompt)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
+	slog.Debug("running claude", "bin", c.Bin, "model", c.Model, "tools", toolList,
+		"prompt_bytes", len(prompt), "timeout", c.Timeout)
+	start := time.Now()
+
 	if err := cmd.Run(); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return "", fmt.Errorf("running %s: timed out after %s", c.Bin, c.Timeout)
+		}
 		return "", fmt.Errorf("running %s: %w: %s", c.Bin, err, strings.TrimSpace(stderr.String()))
 	}
 
 	var envelope struct {
-		IsError bool    `json:"is_error"`
-		Result  string  `json:"result"`
-		CostUSD float64 `json:"total_cost_usd"`
+		IsError  bool    `json:"is_error"`
+		Result   string  `json:"result"`
+		CostUSD  float64 `json:"total_cost_usd"`
+		NumTurns int     `json:"num_turns"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		slog.Debug("unparseable claude output", "stdout", stdout.String(), "stderr", stderr.String())
 		return "", fmt.Errorf("decoding claude output: %w", err)
 	}
 	if envelope.IsError {
 		return "", fmt.Errorf("claude returned an error: %s", envelope.Result)
 	}
 
-	slog.Debug("claude call finished", "cost_usd", envelope.CostUSD)
+	slog.Debug("claude call finished", "duration", time.Since(start).Round(time.Millisecond),
+		"cost_usd", envelope.CostUSD, "turns", envelope.NumTurns, "result_bytes", len(envelope.Result))
 	return envelope.Result, nil
 }
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -35,6 +36,7 @@ func (n *Discord) Name() string { return "discord" }
 func (n *Discord) Send(ctx context.Context, d digest.Digest) error {
 	chunks := splitMessage(d.Markdown(), discordMaxLen)
 	for i, c := range chunks {
+		slog.Debug("posting discord message", "chunk", fmt.Sprintf("%d/%d", i+1, len(chunks)), "chars", utf8.RuneCountInString(c))
 		if err := n.post(ctx, c); err != nil {
 			return fmt.Errorf("chunk %d/%d: %w", i+1, len(chunks), err)
 		}
@@ -81,10 +83,12 @@ func (n *Discord) post(ctx context.Context, content string) error {
 		case resp.StatusCode >= 200 && resp.StatusCode < 300:
 			return nil
 		case resp.StatusCode == http.StatusTooManyRequests && !retried:
+			wait := retryAfter(resp.Header, respBody)
+			slog.Warn("discord rate limited, retrying", "wait", wait)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case <-time.After(retryAfter(resp.Header, respBody)):
+			case <-time.After(wait):
 			}
 		default:
 			return fmt.Errorf("unexpected status %s: %s", resp.Status, snippet(respBody))

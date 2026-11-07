@@ -46,6 +46,9 @@ func run(envFile string, dryRun bool) error {
 	if err != nil {
 		return err
 	}
+	slog.Debug("loaded environment", "path", cfg.EnvFile, "components", len(env.Stack),
+		"research_relevance", env.ResearchRelevance, "custom_prompt", env.Prompt != "",
+		"custom_research_prompt", env.ResearchPrompt != "")
 
 	notifiers := notify.FromConfig(cfg)
 	if dryRun {

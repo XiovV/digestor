@@ -60,15 +60,22 @@ func Fetch(ctx context.Context, urls []string, since time.Time) ([]Item, error) 
 }
 
 func fetchOne(ctx context.Context, url string, since time.Time) ([]Item, error) {
+	slog.Debug("fetching feed", "url", url)
+	start := time.Now()
 	f, err := gofeed.NewParser().ParseURLWithContext(url, ctx)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", url, err)
 	}
 
 	var items []Item
+	undated := 0
 	for _, it := range f.Items {
 		published := itemTime(it)
-		if published.IsZero() || published.Before(since) {
+		if published.IsZero() {
+			undated++
+			continue
+		}
+		if published.Before(since) {
 			continue
 		}
 
@@ -82,7 +89,8 @@ func fetchOne(ctx context.Context, url string, since time.Time) ([]Item, error) 
 		})
 	}
 
-	slog.Debug("fetched feed", "url", url, "total", len(f.Items), "in_window", len(items))
+	slog.Debug("fetched feed", "url", url, "title", f.Title, "total", len(f.Items), "in_window", len(items),
+		"undated", undated, "duration", time.Since(start).Round(time.Millisecond))
 	return items, nil
 }
 

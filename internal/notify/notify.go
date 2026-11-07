@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/XiovV/digestor/internal/config"
 	"github.com/XiovV/digestor/internal/digest"
@@ -36,12 +37,14 @@ func FromConfig(cfg *config.Config) []Notifier {
 func SendAll(ctx context.Context, ns []Notifier, d digest.Digest) error {
 	var errs []error
 	for _, n := range ns {
+		slog.Debug("sending digest", "notifier", n.Name(), "findings", len(d.Findings))
+		start := time.Now()
 		if err := n.Send(ctx, d); err != nil {
 			slog.Error("sending digest failed", "notifier", n.Name(), "err", err)
 			errs = append(errs, fmt.Errorf("%s: %w", n.Name(), err))
 			continue
 		}
-		slog.Info("digest sent", "notifier", n.Name())
+		slog.Info("digest sent", "notifier", n.Name(), "duration", time.Since(start).Round(time.Millisecond))
 	}
 	return errors.Join(errs...)
 }

@@ -34,6 +34,10 @@ func main() {
 }
 
 func run(envFile string, dryRun bool) error {
+	if err := config.LoadDotenv(".env"); err != nil {
+		return err
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		return err

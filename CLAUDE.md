@@ -12,7 +12,7 @@ A Go CLI that fetches security news from RSS feeds and has Claude keep only the 
 ## Layout
 ```
 cmd/digestor/main.go      flags (-env, -dry-run, -v), wiring
-internal/config           all settings from env vars; a notifier is enabled when its vars are set
+internal/config           all settings from env vars (LoadDotenv fills them from .env first); a notifier is enabled when its vars are set
 internal/environment      YAML schema, validation, Describe() for prompts
 internal/feed             gofeed fetching and time window
 internal/analyzer         Analyzer interface; ClaudeCLI (runs `claude -p`); prompt templates
@@ -27,7 +27,7 @@ environment.example.yaml  documented example of the YAML schema
 - **Claude is called by running the Claude Code CLI as a subprocess, not through the API or an SDK.** The command is `claude -p --output-format json --no-session-persistence --tools <list> [--allowedTools <list>] [--model X]`, with the prompt on stdin. `ClaudeCLI.run` reads `result` from the JSON envelope, and `decodeJSON` pulls the JSON out of the result text.
 - **One-shot.** An external scheduler (cron, systemd, k8s CronJob) runs it. There is no daemon mode.
 - **No dedup state.** The lookback window is the only filter. A story repeated across feeds is merged by the prompt.
-- **Config.** Runtime settings and secrets come only from env vars. The YAML holds only the prompt and environment info.
+- **Config.** Runtime settings and secrets come only from env vars. At startup `config.LoadDotenv` reads `.env` from the working directory, if present, and sets only variables that aren't already set, so the real environment wins. It's a small stdlib parser (comments, `export`, single/double quotes, multi-line double-quoted values). The YAML holds only the prompt and environment info.
 - **Minimal dependencies:** only `github.com/mmcdole/gofeed` and `go.yaml.in/yaml/v3`. Use the stdlib for everything else (`net/smtp`, `net/http`, `os/exec`, `text/template`, `log/slog`).
 
 ## Environment YAML

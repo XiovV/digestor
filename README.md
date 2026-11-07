@@ -35,7 +35,7 @@ stack:               # required
     notes: Reverse proxy for everything
 ```
 
-**2. Set environment variables.** See [`.env.example`](.env.example) for the full list.
+**2. Set environment variables.** See [`.env.example`](.env.example) for the full list. digestor reads a `.env` file from the working directory if there is one (`cp .env.example .env`). Variables already set in the environment take precedence over the file.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -66,5 +66,5 @@ export RSS_FEEDS="https://feeds.feedburner.com/TheHackersNews,https://www.bleepi
 digestor runs once and exits, with a non-zero exit code if anything failed. To get a daily digest, schedule it, for example with cron:
 
 ```cron
-0 7 * * * cd /opt/digestor && set -a && . ./.env && ./digestor
+0 7 * * * cd /opt/digestor && ./digestor
 ```

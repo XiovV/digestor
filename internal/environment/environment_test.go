@@ -3,6 +3,7 @@ package environment
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -100,5 +101,115 @@ func TestDescribeOmitsPrompts(t *testing.T) {
 	}
 	if strings.Contains(desc, "SECRET INSTRUCTIONS") || strings.Contains(desc, "RESEARCH INSTRUCTIONS") || !strings.Contains(desc, "nginx") || !strings.Contains(desc, "Homelab.") {
 		t.Errorf("Describe() = %q", desc)
+	}
+}
+
+func TestLoadAdvisories(t *testing.T) {
+	tests := []struct {
+		name    string
+		yaml    string
+		want    Advisories
+		wantErr string // substring; empty means success
+	}{
+		{
+			name: "minimal",
+			yaml: `
+advisories:
+  github:
+    - affects: [github.com/caddyserver/caddy/v2]
+  github_repos:
+    - caddyserver/caddy
+  osv:
+    - purl: pkg:golang/stdlib
+`,
+			want: Advisories{
+				GitHub:      []GitHubQuery{{Affects: []string{"github.com/caddyserver/caddy/v2"}}},
+				GitHubRepos: []string{"caddyserver/caddy"},
+				OSV:         []OSVQuery{{PURL: "pkg:golang/stdlib"}},
+			},
+		},
+		{
+			name: "all fields",
+			yaml: `
+advisories:
+  github:
+    - name: Caddy
+      ecosystem: go
+      affects: [github.com/caddyserver/caddy/v2@2.11.2, golang.org/x/net]
+      severity: high
+      type: reviewed
+      cwes: [CWE-79]
+  osv:
+    - name: Go
+      ecosystem: Go
+      package: stdlib
+      version: "1.23.0"
+`,
+			want: Advisories{
+				GitHub: []GitHubQuery{{
+					Name:      "Caddy",
+					Ecosystem: "go",
+					Affects:   []string{"github.com/caddyserver/caddy/v2@2.11.2", "golang.org/x/net"},
+					Severity:  "high",
+					Type:      "reviewed",
+					CWEs:      []string{"CWE-79"},
+				}},
+				OSV: []OSVQuery{{Name: "Go", Ecosystem: "Go", Package: "stdlib", Version: "1.23.0"}},
+			},
+		},
+		{name: "none", yaml: ""},
+		{
+			name:    "github without filter",
+			yaml:    "advisories:\n  github:\n    - name: Caddy\n      severity: high\n",
+			wantErr: "advisories.github[0] (Caddy): set at least one of ecosystem, affects or cwes",
+		},
+		{name: "github bad ecosystem", yaml: "advisories:\n  github:\n    - ecosystem: golang\n", wantErr: `advisories.github[0]: ecosystem "golang"`},
+		{name: "github bad severity", yaml: "advisories:\n  github:\n    - ecosystem: go\n      severity: moderate\n", wantErr: `advisories.github[0]: severity "moderate"`},
+		{name: "github bad type", yaml: "advisories:\n  github:\n    - ecosystem: go\n      type: all\n", wantErr: `advisories.github[0]: type "all"`},
+		{name: "repo without owner", yaml: "advisories:\n  github_repos: [caddy]\n", wantErr: `advisories.github_repos[0]: "caddy" must be owner/name`},
+		{name: "repo with extra path", yaml: "advisories:\n  github_repos: [caddyserver/caddy/issues]\n", wantErr: `advisories.github_repos[0]: "caddyserver/caddy/issues" must be owner/name`},
+		{name: "repo with empty owner", yaml: "advisories:\n  github_repos: [/caddy]\n", wantErr: `advisories.github_repos[0]: "/caddy" must be owner/name`},
+		{name: "osv empty", yaml: "advisories:\n  osv:\n    - name: Go\n", wantErr: "advisories.osv[0] (Go): set either purl or ecosystem+package"},
+		{name: "osv package without ecosystem", yaml: "advisories:\n  osv:\n    - package: stdlib\n", wantErr: "advisories.osv[0]: set either purl or ecosystem+package"},
+		{name: "osv purl and package", yaml: "advisories:\n  osv:\n    - purl: pkg:golang/stdlib\n      ecosystem: Go\n      package: stdlib\n", wantErr: "advisories.osv[0]: set either purl or ecosystem+package"},
+		{name: "osv version with purl", yaml: "advisories:\n  osv:\n    - purl: pkg:golang/stdlib\n      version: \"1.23.0\"\n", wantErr: "advisories.osv[0]: version needs ecosystem+package"},
+		{name: "unknown key", yaml: "advisories:\n  github:\n    - affect: [x]\n", wantErr: "affect"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "environment.yaml")
+			if err := os.WriteFile(path, []byte(tt.yaml+"stack:\n  - name: nginx\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			env, err := Load(path)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Load() error = %v", err)
+				}
+				if !reflect.DeepEqual(env.Advisories, tt.want) {
+					t.Errorf("Advisories = %+v, want %+v", env.Advisories, tt.want)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Load() error = %v, want it to contain %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestAdvisoriesLen(t *testing.T) {
+	a := Advisories{
+		GitHub:      []GitHubQuery{{Ecosystem: "go"}, {Ecosystem: "npm"}},
+		GitHubRepos: []string{"caddyserver/caddy"},
+		OSV:         []OSVQuery{{PURL: "pkg:golang/stdlib"}},
+	}
+	if got := a.Len(); got != 4 {
+		t.Errorf("Len() = %d, want 4", got)
+	}
+	if got := (Advisories{}).Len(); got != 0 {
+		t.Errorf("empty Len() = %d, want 0", got)
 	}
 }

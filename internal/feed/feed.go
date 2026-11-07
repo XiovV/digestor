@@ -26,6 +26,10 @@ type Item struct {
 // after since, newest first. A failing feed is logged and skipped; an error
 // is returned only if every feed failed.
 func Fetch(ctx context.Context, urls []string, since time.Time) ([]Item, error) {
+	if len(urls) == 0 {
+		return nil, nil
+	}
+
 	var (
 		mu    sync.Mutex
 		wg    sync.WaitGroup

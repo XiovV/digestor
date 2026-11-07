@@ -15,6 +15,9 @@ type Config struct {
 	EnvFile  string
 	Lookback time.Duration
 
+	// GitHubToken raises the GitHub API rate limit; optional.
+	GitHubToken string
+
 	Claude  Claude
 	SMTP    SMTP
 	Discord Discord
@@ -57,8 +60,9 @@ func Load() (*Config, error) {
 	var errs []error
 
 	cfg := &Config{
-		Feeds:   ParseList(os.Getenv("RSS_FEEDS")),
-		EnvFile: getenv("DIGESTOR_ENV_FILE", "environment.yaml"),
+		Feeds:       ParseList(os.Getenv("RSS_FEEDS")),
+		EnvFile:     getenv("DIGESTOR_ENV_FILE", "environment.yaml"),
+		GitHubToken: os.Getenv("GITHUB_TOKEN"),
 		Claude: Claude{
 			Bin:   getenv("CLAUDE_BIN", "claude"),
 			Model: os.Getenv("CLAUDE_MODEL"),
@@ -93,9 +97,6 @@ func Load() (*Config, error) {
 		errs = append(errs, err)
 	}
 
-	if len(cfg.Feeds) == 0 {
-		errs = append(errs, errors.New("RSS_FEEDS is required"))
-	}
 	if cfg.SMTP.Enabled() && (cfg.SMTP.From == "" || len(cfg.SMTP.To) == 0) {
 		errs = append(errs, errors.New("SMTP_FROM and SMTP_TO are required when SMTP_HOST is set"))
 	}

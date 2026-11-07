@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/XiovV/digestor/internal/advisory"
 	"github.com/XiovV/digestor/internal/analyzer"
 	"github.com/XiovV/digestor/internal/app"
 	"github.com/XiovV/digestor/internal/config"
@@ -51,6 +52,7 @@ func run(envFile string, dryRun bool) error {
 		return err
 	}
 	slog.Debug("loaded environment", "path", cfg.EnvFile, "components", len(env.Stack),
+		"advisory_queries", env.Advisories.Len(), "github_token", cfg.GitHubToken != "",
 		"research_relevance", env.ResearchRelevance, "custom_prompt", env.Prompt != "",
 		"custom_research_prompt", env.ResearchPrompt != "")
 
@@ -70,7 +72,8 @@ func run(envFile string, dryRun bool) error {
 			Model:   cfg.Claude.Model,
 			Timeout: cfg.Claude.Timeout,
 		},
-		Notifiers: notifiers,
+		Advisories: &advisory.Client{Token: cfg.GitHubToken},
+		Notifiers:  notifiers,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"sort"
 	"time"
 
+	"github.com/XiovV/digestor/internal/advisory"
 	"github.com/XiovV/digestor/internal/analyzer"
 	"github.com/XiovV/digestor/internal/config"
 	"github.com/XiovV/digestor/internal/digest"
@@ -18,10 +20,11 @@ import (
 )
 
 type App struct {
-	Config    *config.Config
-	Env       *environment.Environment
-	Analyzer  analyzer.Analyzer
-	Notifiers []notify.Notifier
+	Config     *config.Config
+	Env        *environment.Environment
+	Analyzer   analyzer.Analyzer
+	Advisories *advisory.Client
+	Notifiers  []notify.Notifier
 }
 
 func (a *App) Run(ctx context.Context) error {
@@ -32,14 +35,13 @@ func (a *App) Run(ctx context.Context) error {
 	for i, n := range a.Notifiers {
 		names[i] = n.Name()
 	}
-	slog.Info("starting run", "feeds", len(a.Config.Feeds), "lookback", a.Config.Lookback, "notifiers", names)
+	slog.Info("starting run", "feeds", len(a.Config.Feeds), "advisory_queries", a.Env.Advisories.Len(),
+		"lookback", a.Config.Lookback, "notifiers", names)
 
-	items, err := feed.Fetch(ctx, a.Config.Feeds, since)
+	items, errs, err := a.fetch(ctx, since)
 	if err != nil {
-		return fmt.Errorf("fetching feeds: %w", err)
+		return err
 	}
-	slog.Info("fetched feeds", "feeds", len(a.Config.Feeds), "items", len(items), "since", since.Format(time.RFC3339),
-		"duration", time.Since(start).Round(time.Millisecond))
 
 	var findings []analyzer.Finding
 	if len(items) == 0 {
@@ -49,7 +51,7 @@ func (a *App) Run(ctx context.Context) error {
 		t := time.Now()
 		findings, err = a.Analyzer.Filter(ctx, items, a.Env)
 		if err != nil {
-			return fmt.Errorf("filtering items: %w", err)
+			return errors.Join(append(errs, fmt.Errorf("filtering items: %w", err))...)
 		}
 		slog.Info("filtered items", "relevant", len(findings), "duration", time.Since(t).Round(time.Second))
 	}
@@ -73,7 +75,6 @@ func (a *App) Run(ctx context.Context) error {
 		slog.Info("researching findings", "count", len(toResearch), "relevance", a.Env.ResearchRelevance)
 	}
 
-	var errs []error
 	researchFailed := 0
 	for n, i := range toResearch {
 		f := findings[i]
@@ -107,4 +108,51 @@ func (a *App) Run(ctx context.Context) error {
 		"researched", len(toResearch)-researchFailed, "research_failed", researchFailed,
 		"errors", len(errs), "duration", time.Since(start).Round(time.Second))
 	return errors.Join(errs...)
+}
+
+// fetch reads the RSS feeds and runs the advisory queries, and returns their
+// items merged newest first. When one of the two fails completely, its error
+// is returned in errs and the run goes on with the other; err is set when
+// nothing could be fetched.
+func (a *App) fetch(ctx context.Context, since time.Time) (items []feed.Item, errs []error, err error) {
+	sources := 0
+	if len(a.Config.Feeds) > 0 {
+		sources++
+		start := time.Now()
+		got, err := feed.Fetch(ctx, a.Config.Feeds, since)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("fetching feeds: %w", err))
+		} else {
+			slog.Info("fetched feeds", "feeds", len(a.Config.Feeds), "items", len(got), "since", since.Format(time.RFC3339),
+				"duration", time.Since(start).Round(time.Millisecond))
+			items = append(items, got...)
+		}
+	}
+	if n := a.Env.Advisories.Len(); n > 0 {
+		sources++
+		start := time.Now()
+		got, err := a.Advisories.Fetch(ctx, a.Env.Advisories, since)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("fetching advisories: %w", err))
+		} else {
+			slog.Info("fetched advisories", "queries", n, "items", len(got), "since", since.Format(time.RFC3339),
+				"duration", time.Since(start).Round(time.Millisecond))
+			items = append(items, got...)
+		}
+	}
+
+	switch {
+	case sources == 0:
+		return nil, nil, errors.New("no sources: set RSS_FEEDS or add advisories to the environment file")
+	case len(errs) == sources:
+		return nil, nil, errors.Join(errs...)
+	}
+	for _, err := range errs {
+		slog.Warn("continuing without a failed source", "err", err)
+	}
+
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].Published.After(items[j].Published)
+	})
+	return items, errs, nil
 }

@@ -63,3 +63,38 @@ stack:
     vendor: SUSE
     type: platform
     exposure: internal
+
+# Optional: advisory database queries. Advisories published within
+# DIGESTOR_LOOKBACK go through the same Claude filter as the RSS items.
+# digestor adds the time window, paging and the GitHub token (GITHUB_TOKEN).
+# An advisory found by more than one query is reported once.
+advisories:
+  # GitHub Advisory Database, GET https://api.github.com/advisories.
+  # Set at least one of ecosystem, affects or cwes.
+  #   name:      optional label for logs and the digest source
+  #   ecosystem: go npm pip maven nuget composer rubygems rust erlang actions pub swift other
+  #   affects:   package names; package@version keeps only advisories for that version
+  #   severity:  one of low, medium, high, critical, unknown
+  #   type:      reviewed (default), unreviewed or malware
+  #   cwes:      e.g. [CWE-79]
+  github:
+    - name: Django
+      ecosystem: pip
+      affects: [django@5.1]
+
+  # Advisories a repository publishes itself,
+  # GET https://api.github.com/repos/{owner}/{repo}/security-advisories.
+  # They can show up here before they reach the global database.
+  github_repos:
+    - k3s-io/k3s
+
+  # OSV.dev, POST https://api.osv.dev/v1/query. Covers GitHub's database plus
+  # the Go standard library, Linux distributions and more. Set either purl or
+  # ecosystem + package (+ optional version). Ecosystem names are
+  # case-sensitive: Go, PyPI, npm, crates.io, Debian:12, ...
+  osv:
+    - name: nginx
+      ecosystem: Debian:12
+      package: nginx
+      version: "1.22.1-9"
+    - purl: pkg:golang/stdlib

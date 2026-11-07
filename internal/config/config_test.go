@@ -26,3 +26,36 @@ func TestParseList(t *testing.T) {
 		})
 	}
 }
+
+// clearEnv unsets the variables Load validates so the shell's environment
+// doesn't leak into the test.
+func clearEnv(t *testing.T) {
+	for _, k := range []string{"RSS_FEEDS", "GITHUB_TOKEN", "DIGESTOR_LOOKBACK", "CLAUDE_TIMEOUT", "SMTP_HOST", "SMTP_PORT", "GOTIFY_URL", "GOTIFY_PRIORITY"} {
+		t.Setenv(k, "")
+	}
+}
+
+func TestLoadFeedsOptional(t *testing.T) {
+	clearEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(cfg.Feeds) != 0 {
+		t.Errorf("Feeds = %q, want none", cfg.Feeds)
+	}
+}
+
+func TestLoadGitHubToken(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("GITHUB_TOKEN", "ghp_test")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.GitHubToken != "ghp_test" {
+		t.Errorf("GitHubToken = %q, want %q", cfg.GitHubToken, "ghp_test")
+	}
+}

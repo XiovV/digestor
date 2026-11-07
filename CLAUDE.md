@@ -5,7 +5,7 @@ A Go CLI that fetches security news from RSS feeds and advisory databases (GitHu
 ## Flow
 `cmd/digestor/main.go` → `app.App.Run`:
 1. `state.Load` reads the state file (`DIGESTOR_STATE`; missing means first run). `State.Window` gives the fetch window: last successful run − `DIGESTOR_OVERLAP`, or now − overlap on the first run, never earlier than now − `DIGESTOR_MAX_WINDOW` (a warning is logged when it caps). `App.fetch` collects items published in that window from two sources and merges them newest first:
-   - `feed.Fetch` reads every `RSS_FEEDS` URL concurrently with gofeed.
+   - `feed.Fetch` reads every YAML `feeds` URL concurrently with gofeed.
    - `advisory.Client.Fetch` runs the YAML `advisories` queries concurrently (GitHub `GET /advisories`, GitHub `GET /repos/{owner}/{repo}/security-advisories`, OSV `POST /v1/query`). It drops withdrawn advisories, merges duplicates by ID/alias (github wins over github_repos, which wins over osv) and turns each advisory into a `feed.Item` whose summary lists IDs, severity and affected/patched versions.
    - Inside each source a failing feed or query is logged and skipped. If one source fails completely, the run continues with the other and exits non-zero. It stops if every configured source fails or none is configured.
    - Items with any `feed.Item.Keys` entry already in the state are dropped (count logged at info, each at debug). Keys are `"<feed URL> <GUID or link>"` for news and every ID/alias for advisories. `Digest.ItemsSeen` counts only the new items.
@@ -34,11 +34,12 @@ environment.example.yaml  documented example of the YAML schema
 - **Claude is called by running the Claude Code CLI as a subprocess, not through the API or an SDK.** The command is `claude -p --output-format json --no-session-persistence --tools <list> [--allowedTools <list>] [--model X]`, with the prompt on stdin. `ClaudeCLI.run` reads `result` from the JSON envelope, and `decodeJSON` pulls the JSON out of the result text.
 - **One-shot.** An external scheduler (cron, systemd, k8s CronJob) runs it. There is no daemon mode.
 - **State file, not a lookback window** (see `docs/adr/0001-state-file-replaces-lookback.md`). One JSON file holds the start of the last successful run and every digested item; a successful run is one where ≥1 notifier delivered. A story repeated across feeds within a run is still merged by the prompt. Domain terms (fetch window, overlap, successful run, digested item) are in `CONTEXT.md`.
-- **Config.** Runtime settings and secrets come only from env vars. At startup `config.LoadDotenv` reads `.env` from the working directory, if present, and sets only variables that aren't already set, so the real environment wins. It's a small stdlib parser (comments, `export`, single/double quotes, multi-line double-quoted values). The YAML holds the prompts, the environment info and the advisory queries (`advisories`). RSS feeds stay in env (`RSS_FEEDS`, optional when the YAML has advisories). `GITHUB_TOKEN` (optional) raises the GitHub API limit from 60 to 5000 requests/hour.
+- **Config.** Runtime settings and secrets come only from env vars. At startup `config.LoadDotenv` reads `.env` from the working directory, if present, and sets only variables that aren't already set, so the real environment wins. It's a small stdlib parser (comments, `export`, single/double quotes, multi-line double-quoted values). The YAML holds the prompts, the environment info and the sources: feed URLs (`feeds`) and advisory queries (`advisories`). `GITHUB_TOKEN` (optional) raises the GitHub API limit from 60 to 5000 requests/hour.
 - **Minimal dependencies:** only `github.com/mmcdole/gofeed` and `go.yaml.in/yaml/v3`. Use the stdlib for everything else (`net/smtp`, `net/http`, `os/exec`, `text/template`, `log/slog`).
 
 ## Environment YAML
-- **Fields:** `prompt` (optional), `research_prompt` (optional), `research_relevance` (optional, subset of `critical|high|medium|low`, nil → `[critical, high]` set in `Load`), `context` (optional), `stack` (required, not empty) and `advisories` (optional).
+- **Fields:** `prompt` (optional), `research_prompt` (optional), `research_relevance` (optional, subset of `critical|high|medium|low`, nil → `[critical, high]` set in `Load`), `context` (optional), `stack` (required, not empty), `feeds` (optional) and `advisories` (optional). At least one feed or advisory query is required, which `app.fetch` checks.
+- **Feeds:** a list of URL strings. Each one must be an absolute http(s) URL with a host, and duplicates are rejected. News state keys contain the URL, so changing a feed's URL means its items get digested again.
 - **Stack entries:** `name` (required), `vendor`, `type` (free-form), `version` (string), `exposure` (`internet|internal|local`), `notes`.
 - **Advisories:** three lists, one per endpoint. Go adds the fetch window, paging (max 10 pages per query), headers and the token; the YAML only names what to query.
   - `github`: `name`, `ecosystem`, `affects` (package names, optional `@version`), `severity` (one value), `type`, `cwes`; at least one of ecosystem/affects/cwes. Ecosystem, severity and type are checked against GitHub's values.
@@ -62,7 +63,7 @@ environment.example.yaml  documented example of the YAML schema
 ## Commands
 ```sh
 make vet test build
-RSS_FEEDS="https://feeds.feedburner.com/TheHackersNews" go run ./cmd/digestor -dry-run -v -env environment.example.yaml
+go run ./cmd/digestor -dry-run -v -env environment.example.yaml
 ```
 A live run makes real Claude calls, which cost money and take minutes when there are findings. Run it in the background, and don't pipe it through `tail`, because `tail` hides all output until the run ends. Unit tests don't call Claude.
 

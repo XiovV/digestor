@@ -109,12 +109,12 @@ func TestRunSources(t *testing.T) {
 			defer srv.Close()
 
 			cfg := testConfig(t)
-			if tt.feeds != "none" {
-				cfg.Feeds = []string{srv.URL + "/feed"}
-			}
 			env := &environment.Environment{
 				Stack:             []environment.Component{{Name: "Caddy"}},
 				ResearchRelevance: []string{"critical", "high"},
+			}
+			if tt.feeds != "none" {
+				env.Feeds = []string{srv.URL + "/feed"}
 			}
 			if tt.advisories != "none" {
 				env.Advisories.GitHub = []environment.GitHubQuery{{Affects: []string{"github.com/caddyserver/caddy/v2"}}}
@@ -182,11 +182,13 @@ func TestRunState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := testConfig(t)
-			cfg.Feeds = []string{srv.URL + "/feed"}
 			rec := &recorder{fail: tt.fail}
 			a := &App{
-				Config:     cfg,
-				Env:        &environment.Environment{Stack: []environment.Component{{Name: "Caddy"}}},
+				Config: cfg,
+				Env: &environment.Environment{
+					Stack: []environment.Component{{Name: "Caddy"}},
+					Feeds: []string{srv.URL + "/feed"},
+				},
 				Analyzer:   passAnalyzer{},
 				Advisories: &advisory.Client{},
 				Notifiers:  []notify.Notifier{rec},

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
@@ -41,7 +42,9 @@ type Environment struct {
 	ResearchRelevance []string    `yaml:"research_relevance,omitempty"`
 	Context           string      `yaml:"context,omitempty"`
 	Stack             []Component `yaml:"stack"`
-	Advisories        Advisories  `yaml:"advisories,omitempty"`
+	// Feeds lists the RSS/Atom/JSON feed URLs to read.
+	Feeds      []string   `yaml:"feeds,omitempty"`
+	Advisories Advisories `yaml:"advisories,omitempty"`
 }
 
 type Component struct {
@@ -133,8 +136,26 @@ func (e *Environment) validate() error {
 			errs = append(errs, fmt.Errorf("stack[%d] (%s): exposure %q must be one of %v", i, c.Name, c.Exposure, exposures))
 		}
 	}
+	errs = append(errs, validateFeeds(e.Feeds)...)
 	errs = append(errs, e.Advisories.validate()...)
 	return errors.Join(errs...)
+}
+
+func validateFeeds(feeds []string) []error {
+	var errs []error
+	seen := make(map[string]int, len(feeds))
+	for i, f := range feeds {
+		u, err := url.Parse(f)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			errs = append(errs, fmt.Errorf("feeds[%d]: %q must be an http(s) URL", i, f))
+		}
+		if j, ok := seen[f]; ok {
+			errs = append(errs, fmt.Errorf("feeds[%d]: duplicate of feeds[%d]", i, j))
+			continue
+		}
+		seen[f] = i
+	}
+	return errs
 }
 
 func (a Advisories) validate() []error {

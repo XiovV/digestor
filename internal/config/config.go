@@ -11,7 +11,6 @@ import (
 )
 
 type Config struct {
-	Feeds   []string
 	EnvFile string
 
 	// StateFile remembers the last successful run and the digested items.
@@ -66,7 +65,6 @@ func Load() (*Config, error) {
 	var errs []error
 
 	cfg := &Config{
-		Feeds:       ParseList(os.Getenv("RSS_FEEDS")),
 		EnvFile:     getenv("DIGESTOR_ENV_FILE", "environment.yaml"),
 		StateFile:   getenv("DIGESTOR_STATE", "digestor-state.json"),
 		GitHubToken: os.Getenv("GITHUB_TOKEN"),

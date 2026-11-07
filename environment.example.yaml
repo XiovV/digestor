@@ -64,8 +64,15 @@ stack:
     type: platform
     exposure: internal
 
+# Optional: RSS/Atom/JSON feed URLs (http or https). Items published within
+# the fetch window go through the Claude filter together with the advisories.
+# Set feeds, advisories or both.
+feeds:
+  - https://feeds.feedburner.com/TheHackersNews
+  - https://www.bleepingcomputer.com/feed/
+
 # Optional: advisory database queries. Advisories published within the
-# fetch window go through the same Claude filter as the RSS items.
+# fetch window go through the same Claude filter as the feed items.
 # digestor adds the time window, paging and the GitHub token (GITHUB_TOKEN).
 # An advisory found by more than one query is reported once.
 advisories:

@@ -49,7 +49,7 @@ func (a *App) Run(ctx context.Context) error {
 	for i, n := range a.Notifiers {
 		names[i] = n.Name()
 	}
-	slog.Info("starting run", "feeds", len(a.Config.Feeds), "advisory_queries", a.Env.Advisories.Len(),
+	slog.Info("starting run", "feeds", len(a.Env.Feeds), "advisory_queries", a.Env.Advisories.Len(),
 		"since", since.Format(time.RFC3339), "notifiers", names)
 
 	fetched, errs, err := a.fetch(ctx, since)
@@ -179,14 +179,14 @@ func (a *App) record(st *state.State, start time.Time, items []feed.Item, delive
 // nothing could be fetched.
 func (a *App) fetch(ctx context.Context, since time.Time) (items []feed.Item, errs []error, err error) {
 	sources := 0
-	if len(a.Config.Feeds) > 0 {
+	if len(a.Env.Feeds) > 0 {
 		sources++
 		start := time.Now()
-		got, err := feed.Fetch(ctx, a.Config.Feeds, since)
+		got, err := feed.Fetch(ctx, a.Env.Feeds, since)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("fetching feeds: %w", err))
 		} else {
-			slog.Info("fetched feeds", "feeds", len(a.Config.Feeds), "items", len(got), "since", since.Format(time.RFC3339),
+			slog.Info("fetched feeds", "feeds", len(a.Env.Feeds), "items", len(got), "since", since.Format(time.RFC3339),
 				"duration", time.Since(start).Round(time.Millisecond))
 			items = append(items, got...)
 		}
@@ -206,7 +206,7 @@ func (a *App) fetch(ctx context.Context, since time.Time) (items []feed.Item, er
 
 	switch {
 	case sources == 0:
-		return nil, nil, errors.New("no sources: set RSS_FEEDS or add advisories to the environment file")
+		return nil, nil, errors.New("no sources: add feeds or advisories to the environment file")
 	case len(errs) == sources:
 		return nil, nil, errors.Join(errs...)
 	}

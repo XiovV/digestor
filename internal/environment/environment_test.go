@@ -93,14 +93,64 @@ func TestLoadResearchRelevance(t *testing.T) {
 }
 
 func TestDescribeOmitsPrompts(t *testing.T) {
-	env := &Environment{Prompt: "SECRET INSTRUCTIONS", ResearchPrompt: "RESEARCH INSTRUCTIONS", Context: "Homelab.", Stack: []Component{{Name: "nginx"}}}
+	env := &Environment{Prompt: "SECRET INSTRUCTIONS", ResearchPrompt: "RESEARCH INSTRUCTIONS", Context: "Homelab.", Stack: []Component{{Name: "nginx"}},
+		Feeds: []string{"https://news.example/feed"}}
 
 	desc, err := env.Describe()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(desc, "SECRET INSTRUCTIONS") || strings.Contains(desc, "RESEARCH INSTRUCTIONS") || !strings.Contains(desc, "nginx") || !strings.Contains(desc, "Homelab.") {
+	if strings.Contains(desc, "SECRET INSTRUCTIONS") || strings.Contains(desc, "RESEARCH INSTRUCTIONS") || strings.Contains(desc, "news.example") ||
+		!strings.Contains(desc, "nginx") || !strings.Contains(desc, "Homelab.") {
 		t.Errorf("Describe() = %q", desc)
+	}
+}
+
+func TestLoadFeeds(t *testing.T) {
+	tests := []struct {
+		name    string
+		yaml    string
+		want    []string
+		wantErr string // substring; empty means success
+	}{
+		{
+			name: "valid",
+			yaml: "feeds:\n  - https://feeds.feedburner.com/TheHackersNews\n  - http://news.example/rss?x=1\n",
+			want: []string{"https://feeds.feedburner.com/TheHackersNews", "http://news.example/rss?x=1"},
+		},
+		{name: "none", yaml: ""},
+		{name: "not a URL", yaml: "feeds: [news]\n", wantErr: `feeds[0]: "news" must be an http(s) URL`},
+		{name: "other scheme", yaml: "feeds: [\"ftp://news.example/feed\"]\n", wantErr: `feeds[0]: "ftp://news.example/feed" must be an http(s) URL`},
+		{name: "no host", yaml: "feeds: [\"https:///feed\"]\n", wantErr: `feeds[0]: "https:///feed" must be an http(s) URL`},
+		{name: "relative", yaml: "feeds: [/feed]\n", wantErr: `feeds[0]: "/feed" must be an http(s) URL`},
+		{
+			name:    "duplicate",
+			yaml:    "feeds:\n  - https://news.example/a\n  - https://news.example/b\n  - https://news.example/a\n",
+			wantErr: "feeds[2]: duplicate of feeds[0]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "environment.yaml")
+			if err := os.WriteFile(path, []byte(tt.yaml+"stack:\n  - name: nginx\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			env, err := Load(path)
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Load() error = %v", err)
+				}
+				if !slices.Equal(env.Feeds, tt.want) {
+					t.Errorf("Feeds = %q, want %q", env.Feeds, tt.want)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Load() error = %v, want it to contain %q", err, tt.wantErr)
+			}
+		})
 	}
 }
 

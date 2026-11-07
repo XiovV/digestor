@@ -33,13 +33,17 @@ stack:               # required
     version: "1.24"
     exposure: internet   # internet | internal | local
     notes: Reverse proxy for everything
+feeds:               # RSS/Atom/JSON feed URLs
+  - https://feeds.feedburner.com/TheHackersNews
+  - https://www.bleepingcomputer.com/feed/
 ```
+
+Set `feeds`, `advisories` (GitHub Advisory Database and OSV.dev queries) or both. [`environment.example.yaml`](environment.example.yaml) documents every field.
 
 **2. Set environment variables.** See [`.env.example`](.env.example) for the full list. digestor reads a `.env` file from the working directory if there is one (`cp .env.example .env`). Variables already set in the environment take precedence over the file.
 
 | Variable | Default | Description |
 |---|---|---|
-| `RSS_FEEDS` | (required) | Feed URLs, separated by commas or newlines |
 | `DIGESTOR_ENV_FILE` | `environment.yaml` | Path to the environment YAML |
 | `DIGESTOR_STATE` | `digestor-state.json` | State file: the last successful run and the digested items |
 | `DIGESTOR_OVERLAP` | `48h` | How far before the last successful run each fetch starts |
@@ -90,7 +94,6 @@ These are copied from [`internal/analyzer/prompt.go`](internal/analyzer/prompt.g
 ## Run
 
 ```sh
-export RSS_FEEDS="https://feeds.feedburner.com/TheHackersNews,https://www.bleepingcomputer.com/feed/"
 ./digestor -dry-run
 ```
 

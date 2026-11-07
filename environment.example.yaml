@@ -1,0 +1,52 @@
+# Describes your environment for digestor. Copy it to environment.yaml and edit.
+
+# Optional: analyst instructions for Claude. If left out, a built-in default is
+# used. digestor adds the stack, the news items and the JSON output format.
+# prompt: |
+#   You are the security analyst for my homelab. Rate each relevant item
+#   critical, high, medium or low. Only nginx is reachable from the internet,
+#   so be strict about anything else. Skip Windows-only issues.
+
+# Optional: free text about the environment as a whole.
+context: |
+  Small homelab: 3 Debian hosts running Docker and a k3s cluster.
+  Only nginx is reachable from the internet; everything else is LAN-only
+  behind a WireGuard VPN.
+
+# Required: the components you run. Only name is required.
+#   vendor:   helps tell products with similar names apart
+#   type:     free-form, e.g. service, framework, platform, library
+#   version:  quote it so YAML keeps it as a string ("1.20" stays "1.20")
+#   exposure: internet | internal | local
+#   notes:    where and how you run it
+stack:
+  - name: nginx
+    vendor: F5
+    type: service
+    version: "1.24"
+    exposure: internet
+    notes: Reverse proxy in front of Gitea and the Django apps.
+
+  - name: PostgreSQL
+    type: service
+    version: "16"
+    exposure: internal
+
+  - name: Gitea
+    type: service
+    version: "1.22"
+    exposure: internal
+    notes: Self-hosted Git with Actions runners on a shared Docker host.
+
+  - name: Django
+    type: framework
+    version: "5.1"
+
+  - name: Debian
+    type: platform
+    version: "12"
+
+  - name: k3s
+    vendor: SUSE
+    type: platform
+    exposure: internal
